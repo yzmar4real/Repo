@@ -1,0 +1,67 @@
+version: "3.7"
+
+services:
+  # --- Database (MariaDB) ---
+  db:
+    image: mariadb:10.5
+    container_name: librenms_db
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--innodb_file_per_table=1"
+      - "--lower_case_table_names=0"
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: librenms
+      MYSQL_USER: librenms
+      MYSQL_PASSWORD: librenms_db_pass
+    volumes:
+      - ./db-data:/var/lib/mysql
+
+  # --- Memcached ---
+  memcached:
+    image: memcached:alpine
+    container_name: librenms_memcached
+    command:
+      - "-m=256"
+      - "-o"
+      - "modern"
+    restart: always
+
+  # --- Redis ---
+  redis:
+    image: redis:7.0-alpine
+    container_name: librenms_redis
+    restart: always
+
+  # --- LibreNMS ---
+  librenms:
+    image: librenms/librenms:latest
+    container_name: librenms_app
+    restart: always
+    depends_on:
+      - db
+      - memcached
+      - redis
+    ports:
+      - "8000:8000"
+    environment:
+      # Database connection info
+      DB_HOST: db
+      DB_NAME: librenms
+      DB_USER: librenms
+      DB_PASS: librenms_db_pass
+      
+      # Memcached & Redis
+      MEMCACHED_HOST: memcached
+      REDIS_HOST: redis
+
+      # Timezone (adjust as needed)
+      TZ: "UTC"
+
+      # Optional additional environment variables can be set here
+      # APP_KEY, POLLER_GROUP, etc. (see the docs for details)
+    volumes:
+      # The LibreNMS container needs persistent data
+      - ./librenms-data:/data

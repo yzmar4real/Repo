@@ -1,65 +1,172 @@
+name: librenms
+
 services:
-  # --- Database (MariaDB) ---
+  # -----------------------------------------------------------
+  # MariaDB (Database)
+  # -----------------------------------------------------------
   db:
-    image: mariadb:10.5
+    image: mariadb:10
     container_name: librenms_db
     command:
+      - "mysqld"
+      - "--innodb-file-per-table=1"
+      - "--lower-case-table-names=0"
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
-      - "--innodb_file_per_table=1"
-      - "--lower_case_table_names=0"
-    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: AABBccDDee1234$
-      MYSQL_DATABASE: librenms
-      MYSQL_USER: librenms
-      MYSQL_PASSWORD: librenms_db_pass
+      # Time zone
+      TZ: "UTC"
+      # Generate a random root password on startup
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      # LibreNMS DB details
+      MYSQL_DATABASE: "librenms"
+      MYSQL_USER: "librenms"
+      MYSQL_PASSWORD: "librenms_db_pass"
     volumes:
-      - ./db-data:/var/lib/mysql
-
-  # --- Memcached ---
-  memcached:
-    image: memcached:alpine
-    container_name: librenms_memcached
-    command:
-      - "-m=256"
-      - "-o"
-      - "modern"
+      - "./db:/var/lib/mysql"
     restart: always
 
-  # --- Redis ---
+  # -----------------------------------------------------------
+  # Redis (Caching / Session Store)
+  # -----------------------------------------------------------
   redis:
-    image: redis:7.0-alpine
+    image: redis:7.2-alpine
     container_name: librenms_redis
+    environment:
+      TZ: "UTC"
     restart: always
 
-  # --- LibreNMS ---
+  # -----------------------------------------------------------
+  # MSMTPd (Optional SMTP Relay Container)
+  # -----------------------------------------------------------
+  msmtpd:
+    image: crazymax/msmtpd:latest
+    container_name: librenms_msmtpd
+    # If you need to configure msmtpd environment variables,
+    # you can inline them here as well:
+    # environment:
+    #   SMTP_LOGIN: ...
+    #   SMTP_PASSWORD: ...
+    #   etc.
+    restart: always
+
+  # -----------------------------------------------------------
+  # LibreNMS (Main Web + PHP-FPM Container)
+  # -----------------------------------------------------------
   librenms:
     image: librenms/librenms:latest
-    container_name: librenms_app
-    restart: always
+    container_name: librenms
+    hostname: librenms
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # Map container port 8000 to host port 8900
+    ports:
+      - "8900:8000"
     depends_on:
       - db
-      - memcached
+      - redis
+      - msmtpd
+    volumes:
+      - "./librenms:/data"
+    environment:
+      TZ: "UTC"
+      # These PUID/PGID default to typical Docker user=1000:1000
+      PUID: "1000"
+      PGID: "1000"
+      DB_HOST: "db"
+      DB_NAME: "librenms"
+      DB_USER: "librenms"
+      DB_PASSWORD: "librenms_db_pass"
+      DB_TIMEOUT: "60"
+      # (Optional) If you want the internal links to reference :8900
+      # APP_URL: "http://localhost:8900"
+    restart: always
+
+  # -----------------------------------------------------------
+  # Dispatcher (Poller / Discovery / Alerts)
+  # -----------------------------------------------------------
+  dispatcher:
+    image: librenms/librenms:latest
+    container_name: librenms_dispatcher
+    hostname: librenms-dispatcher
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      - librenms
+      - redis
+    volumes:
+      - "./librenms:/data"
+    environment:
+      TZ: "UTC"
+      PUID: "1000"
+      PGID: "1000"
+      DB_HOST: "db"
+      DB_NAME: "librenms"
+      DB_USER: "librenms"
+      DB_PASSWORD: "librenms_db_pass"
+      DB_TIMEOUT: "60"
+      DISPATCHER_NODE_ID: "dispatcher1"
+      SIDECAR_DISPATCHER: "1"
+    restart: always
+
+  # -----------------------------------------------------------
+  # Syslog-ng (Sidecar)
+  # -----------------------------------------------------------
+  syslogng:
+    image: librenms/librenms:latest
+    container_name: librenms_syslogng
+    hostname: librenms-syslogng
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      - librenms
       - redis
     ports:
-      - "8900:8900"
-    environment:
-      # Database connection info
-      DB_HOST: db
-      DB_NAME: librenms
-      DB_USER: librenms
-      DB_PASS: librenms_db_pass
-      
-      # Memcached & Redis
-      MEMCACHED_HOST: memcached
-      REDIS_HOST: redis
-
-      # Timezone (adjust as needed)
-      TZ: "UTC"
-
-      # Optional additional environment variables can be set here
-      # APP_KEY, POLLER_GROUP, etc. (see the docs for details)
+      - "514:514/tcp"
+      - "514:514/udp"
     volumes:
-      # The LibreNMS container needs persistent data
-      - ./librenms-data:/data
+      - "./librenms:/data"
+    environment:
+      TZ: "UTC"
+      PUID: "1000"
+      PGID: "1000"
+      DB_HOST: "db"
+      DB_NAME: "librenms"
+      DB_USER: "librenms"
+      DB_PASSWORD: "librenms_db_pass"
+      DB_TIMEOUT: "60"
+      SIDECAR_SYSLOGNG: "1"
+    restart: always
+
+  # -----------------------------------------------------------
+  # SNMPTrapd (Sidecar)
+  # -----------------------------------------------------------
+  snmptrapd:
+    image: librenms/librenms:latest
+    container_name: librenms_snmptrapd
+    hostname: librenms-snmptrapd
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      - librenms
+      - redis
+    ports:
+      - "162:162/tcp"
+      - "162:162/udp"
+    volumes:
+      - "./librenms:/data"
+    environment:
+      TZ: "UTC"
+      PUID: "1000"
+      PGID: "1000"
+      DB_HOST: "db"
+      DB_NAME: "librenms"
+      DB_USER: "librenms"
+      DB_PASSWORD: "librenms_db_pass"
+      DB_TIMEOUT: "60"
+      SIDECAR_SNMPTRAPD: "1"
+    restart: always

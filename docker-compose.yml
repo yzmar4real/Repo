@@ -1,6 +1,9 @@
 name: librenms
 
 services:
+  # ---------------------------------------------------------------------------
+  # MariaDB (Database)
+  # ---------------------------------------------------------------------------
   db:
     image: mariadb:10
     container_name: librenms_db
@@ -13,27 +16,44 @@ services:
     volumes:
       - "./db:/var/lib/mysql"
     environment:
-      - "TZ=${TZ}"
-      - "MARIADB_RANDOM_ROOT_PASSWORD=yes"
-      - "MYSQL_DATABASE=${MYSQL_DATABASE}"
-      - "MYSQL_USER=${MYSQL_USER}"
-      - "MYSQL_PASSWORD=${MYSQL_PASSWORD}"
+      - TZ=UTC
+      # Random root password on first startup; you can also define a specific one if you prefer
+      - MARIADB_RANDOM_ROOT_PASSWORD=yes
+      # LibreNMS database name and credentials
+      - MYSQL_DATABASE=librenms
+      - MYSQL_USER=librenms
+      - MYSQL_PASSWORD=librenms_db_pass
     restart: always
 
+  # ---------------------------------------------------------------------------
+  # Redis (Caching / Session Store)
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7.2-alpine
     container_name: librenms_redis
     environment:
-      - "TZ=${TZ}"
+      - TZ=UTC
     restart: always
 
+  # ---------------------------------------------------------------------------
+  # MSMTPd (SMTP Relay Container) - optional 
+  # ---------------------------------------------------------------------------
   msmtpd:
     image: crazymax/msmtpd:latest
     container_name: librenms_msmtpd
-    env_file:
-      - "./msmtpd.env"
+    # Example environment variables inline
+    environment:
+      - TZ=UTC
+      - SMTP_HOST=smtp.example.com
+      - SMTP_PORT=587
+      - SMTP_USER=smtpuser
+      - SMTP_PASS=smtppass
+      # Adjust as needed for your mail relay
     restart: always
 
+  # ---------------------------------------------------------------------------
+  # LibreNMS (Main Web + PHP-FPM Container)
+  # ---------------------------------------------------------------------------
   librenms:
     image: librenms/librenms:latest
     container_name: librenms
@@ -42,8 +62,9 @@ services:
       - NET_ADMIN
       - NET_RAW
     ports:
+      # Map container port 8000 to host port 8900
       - target: 8000
-        published: 8900  # Changed from 8000 to 8900
+        published: 8900
         protocol: tcp
     depends_on:
       - db
@@ -51,20 +72,29 @@ services:
       - msmtpd
     volumes:
       - "./librenms:/data"
-    env_file:
-      - "./librenms.env"
     environment:
-      - "TZ=${TZ}"
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "DB_HOST=db"
-      - "DB_NAME=${MYSQL_DATABASE}"
-      - "DB_USER=${MYSQL_USER}"
-      - "DB_PASSWORD=${MYSQL_PASSWORD}"
-      - "DB_TIMEOUT=60"
-      - "REDIS_HOST=redis"          # <-- Added
+      # General settings
+      - TZ=UTC
+      - PUID=1000
+      - PGID=1000
+
+      # Database connection
+      - DB_HOST=db
+      - DB_NAME=librenms
+      - DB_USER=librenms
+      - DB_PASSWORD=librenms_db_pass
+      - DB_TIMEOUT=60
+
+      # Redis host for caching
+      - REDIS_HOST=redis
+
+      # If you want internal URLs to use port 8900, uncomment and set:
+      # - APP_URL=http://localhost:8900
     restart: always
 
+  # ---------------------------------------------------------------------------
+  # Dispatcher (Poller, Discovery, Alerting)
+  # ---------------------------------------------------------------------------
   dispatcher:
     image: librenms/librenms:latest
     container_name: librenms_dispatcher
@@ -77,22 +107,29 @@ services:
       - redis
     volumes:
       - "./librenms:/data"
-    env_file:
-      - "./librenms.env"
     environment:
-      - "TZ=${TZ}"
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "DB_HOST=db"
-      - "DB_NAME=${MYSQL_DATABASE}"
-      - "DB_USER=${MYSQL_USER}"
-      - "DB_PASSWORD=${MYSQL_PASSWORD}"
-      - "DB_TIMEOUT=60"
-      - "DISPATCHER_NODE_ID=dispatcher1"
-      - "SIDECAR_DISPATCHER=1"
-      - "REDIS_HOST=redis"          # <-- Added
+      - TZ=UTC
+      - PUID=1000
+      - PGID=1000
+
+      # Database connection
+      - DB_HOST=db
+      - DB_NAME=librenms
+      - DB_USER=librenms
+      - DB_PASSWORD=librenms_db_pass
+      - DB_TIMEOUT=60
+
+      # Dispatcher config
+      - DISPATCHER_NODE_ID=dispatcher1
+      - SIDECAR_DISPATCHER=1
+
+      # Redis host
+      - REDIS_HOST=redis
     restart: always
 
+  # ---------------------------------------------------------------------------
+  # Syslog-ng (Sidecar)
+  # ---------------------------------------------------------------------------
   syslogng:
     image: librenms/librenms:latest
     container_name: librenms_syslogng
@@ -112,21 +149,28 @@ services:
         protocol: udp
     volumes:
       - "./librenms:/data"
-    env_file:
-      - "./librenms.env"
     environment:
-      - "TZ=${TZ}"
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "DB_HOST=db"
-      - "DB_NAME=${MYSQL_DATABASE}"
-      - "DB_USER=${MYSQL_USER}"
-      - "DB_PASSWORD=${MYSQL_PASSWORD}"
-      - "DB_TIMEOUT=60"
-      - "SIDECAR_SYSLOGNG=1"
-      - "REDIS_HOST=redis"          # <-- Added
+      - TZ=UTC
+      - PUID=1000
+      - PGID=1000
+
+      # Database connection
+      - DB_HOST=db
+      - DB_NAME=librenms
+      - DB_USER=librenms
+      - DB_PASSWORD=librenms_db_pass
+      - DB_TIMEOUT=60
+
+      # Sidecar syslog
+      - SIDECAR_SYSLOGNG=1
+
+      # Redis host
+      - REDIS_HOST=redis
     restart: always
 
+  # ---------------------------------------------------------------------------
+  # SNMPTrapd (Sidecar)
+  # ---------------------------------------------------------------------------
   snmptrapd:
     image: librenms/librenms:latest
     container_name: librenms_snmptrapd
@@ -146,17 +190,21 @@ services:
         protocol: udp
     volumes:
       - "./librenms:/data"
-    env_file:
-      - "./librenms.env"
     environment:
-      - "TZ=${TZ}"
-      - "PUID=${PUID}"
-      - "PGID=${PGID}"
-      - "DB_HOST=db"
-      - "DB_NAME=${MYSQL_DATABASE}"
-      - "DB_USER=${MYSQL_USER}"
-      - "DB_PASSWORD=${MYSQL_PASSWORD}"
-      - "DB_TIMEOUT=60"
-      - "SIDECAR_SNMPTRAPD=1"
-      - "REDIS_HOST=redis"          # <-- Added
+      - TZ=UTC
+      - PUID=1000
+      - PGID=1000
+
+      # Database connection
+      - DB_HOST=db
+      - DB_NAME=librenms
+      - DB_USER=librenms
+      - DB_PASSWORD=librenms_db_pass
+      - DB_TIMEOUT=60
+
+      # Sidecar snmptrapd
+      - SIDECAR_SNMPTRAPD=1
+
+      # Redis host
+      - REDIS_HOST=redis
     restart: always

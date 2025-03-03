@@ -1,0 +1,40 @@
+services:
+  db:
+    image: mariadb:10.5
+    command: --innodb-file-per-table=1 --lower-case-table-names=0
+    environment:
+      - MYSQL_DATABASE=librenms
+      - MYSQL_USER=librenms
+      - MYSQL_PASSWORD=securepassword  # Replace with a strong password
+      - MYSQL_ROOT_PASSWORD=anothersecurepassword  # Replace with a strong password
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+
+  redis:
+    image: redis:6.2
+    restart: unless-stopped
+
+  librenms:
+    image: librenms/librenms:latest
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "3000:80"  # Updated to map host port 3000 to container port 80
+    environment:
+      - DB_HOST=db
+      - DB_NAME=librenms
+      - DB_USER=librenms
+      - DB_PASS=securepassword  # Must match MYSQL_PASSWORD above
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PUID=1000  # Adjust to your host user's UID (run 'id' to check)
+      - PGID=1000  # Adjust to your host user's GID (run 'id' to check)
+    volumes:
+      - librenms_data:/data
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  librenms_data:

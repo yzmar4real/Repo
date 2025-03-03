@@ -1,0 +1,47 @@
+services:
+  netbox:
+    image: netboxcommunity/netbox:latest
+    container_name: netbox
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      # Webserver configuration
+      ALLOWED_HOSTS: '*'
+      SECRET_KEY: 'your-secret-key'
+      # Database settings
+      DATABASE_HOST: postgres
+      DATABASE_NAME: netbox
+      DATABASE_USER: netbox
+      DATABASE_PASSWORD: netboxpass
+      DATABASE_PORT: 5432
+      # Redis settings
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8000:8080"  # Map container port 8080 to host port 8000
+    volumes:
+      - ./netbox/config:/etc/netbox/config
+    restart: always
+
+  postgres:
+    image: postgres:13-alpine
+    container_name: netbox-postgres
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netboxpass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: netbox-redis
+    volumes:
+      - redis_data:/data
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:

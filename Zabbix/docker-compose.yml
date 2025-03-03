@@ -1,0 +1,53 @@
+services:
+  mysql:
+    image: mysql:5.7
+    container_name: zabbix-mysql
+    platform: linux/amd64
+    environment:
+      MYSQL_ROOT_PASSWORD: zabbix
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:alpine-6.0-latest
+    container_name: zabbix-server
+    platform: linux/amd64
+    depends_on:
+      - mysql
+    environment:
+      DB_SERVER_HOST: mysql
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+    ports:
+      - "10051:10051"
+    volumes:
+      - zabbix_server_data:/var/lib/zabbix
+    restart: unless-stopped
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-6.0-latest
+    container_name: zabbix-web
+    platform: linux/amd64
+    depends_on:
+      - zabbix-server
+      - mysql
+    environment:
+      DB_SERVER_HOST: mysql
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: "UTC"
+    ports:
+      - "8500:8080"
+      - "8443:8443"
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  zabbix_server_data:

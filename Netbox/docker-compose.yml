@@ -1,47 +1,57 @@
+version: '3.8'
 services:
   netbox:
     image: netboxcommunity/netbox:latest
-    container_name: netbox
     depends_on:
       - postgres
       - redis
-    environment:
-      # Webserver configuration
-      ALLOWED_HOSTS: '*'
-      SECRET_KEY: 'your-secret-key'
-      # Database settings
-      DATABASE_HOST: postgres
-      DATABASE_NAME: netbox
-      DATABASE_USER: netbox
-      DATABASE_PASSWORD: netboxpass
-      DATABASE_PORT: 5432
-      # Redis settings
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
     ports:
-      - "8000:8080"  # Map container port 8080 to host port 8000
+      - "8080:8080"
     volumes:
-      - ./netbox/config:/etc/netbox/config
-    restart: always
+      - netbox-static-files:/opt/netbox/netbox/static
+      - netbox-media-files:/opt/netbox/netbox/media
+    environment:
+      # Netbox configuration
+      - SUPERUSER_USERNAME=admin
+      - SUPERUSER_PASSWORD=admin123
+      - SUPERUSER_EMAIL=admin@example.com
+      - SUPERUSER_API_TOKEN=0123456789abcdef0123456789abcdef01234567
+      # Database configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=netbox
+      - DB_USER=netbox
+      - DB_PASSWORD=securepassword123
+      # Redis configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redissecure123
+      # Secret key (generate a unique one for production)
+      - SECRET_KEY=2vym+ky!j+djr0ddsquf0#b%7g$m^p%es3b)g=m_m3v%98u%ak
+      # Allowed hosts
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      # Other configurations
+      - NAPALM_USERNAME=admin
+      - NAPALM_PASSWORD=admin123
+      - TIME_ZONE=UTC
 
   postgres:
-    image: postgres:13-alpine
-    container_name: netbox-postgres
+    image: postgres:15
     environment:
-      POSTGRES_DB: netbox
-      POSTGRES_USER: netbox
-      POSTGRES_PASSWORD: netboxpass
+      - POSTGRES_DB=netbox
+      - POSTGRES_USER=netbox
+      - POSTGRES_PASSWORD=securepassword123
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: always
+      - postgres-data:/var/lib/postgresql/data
 
   redis:
-    image: redis:alpine
-    container_name: netbox-redis
+    image: redis:7
+    command: redis-server --requirepass redissecure123
     volumes:
-      - redis_data:/data
-    restart: always
+      - redis-data:/data
 
 volumes:
-  postgres_data:
-  redis_data:
+  netbox-static-files:
+  netbox-media-files:
+  postgres-data:
+  redis-data:

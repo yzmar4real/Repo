@@ -24,7 +24,6 @@ cd netbox-docker
 
 # 3) Create the docker-compose.yml file
 cat <<EOF > docker-compose.yml
-version: '3.8'
 services:
   #------------------------------------------------------------------------------
   # NetBox application service
@@ -38,7 +37,7 @@ services:
     environment:
       # Basic required env vars
       ALLOWED_HOSTS: '*'
-      SECRET_KEY: 'REPLACE_WITH_STRONG_SECRET_KEY'
+      SECRET_KEY: 'p3rVvAqx8QVAran2MqS4FJzETCXRmBIE9zSPH_3GsKGbjxhzfJ'
       DB_HOST: postgres
       DB_NAME: netbox
       DB_USER: netbox
